@@ -1,25 +1,25 @@
 from datetime import datetime
 import json
 import requests
-
+from zoneinfo import ZoneInfo
 
 def obtener_datos():
     url = "https://mindicador.cl/api"
     respuesta = requests.get(url, timeout=10)
     data = respuesta.json()
 
-    # Formatos de valores
     uf_val = f"${data['uf']['valor']:,.0f}".replace(",", ".")
     dolar_val = f"${data['dolar']['valor']:,.2f}".replace(",", ".")
     ipc_val = f"{data['ipc']['valor']}%"
 
-    # La TPM en mindicador.cl a veces requiere extraer el valor directo
-    # o usar un valor por defecto si la serie viene vacía ese día
     tpm_num = data.get("tpm", {}).get("valor", None)
     tpm_val = f"{tpm_num}%" if tpm_num is not None else "N/D"
 
+    # Aquí aplicamos la zona horaria de Chile
+    hora_chile = datetime.now(ZoneInfo("America/Santiago"))
+
     indicadores = {
-        "actualizado": datetime.now().strftime("%d-%m-%Y %H:%M"),
+        "actualizado": hora_chile.strftime("%d-%m-%Y %H:%M"),
         "uf": uf_val,
         "dolar": dolar_val,
         "ipc": ipc_val,
@@ -28,7 +28,6 @@ def obtener_datos():
 
     with open("indicadores.json", "w", encoding="utf-8") as f:
         json.dump(indicadores, f, ensure_ascii=False, indent=2)
-
 
 if __name__ == "__main__":
     obtener_datos()
