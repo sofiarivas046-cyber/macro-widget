@@ -88,3 +88,37 @@ def obtener_datos():
 
 if __name__ == "__main__":
     obtener_datos()
+
+def obtener_serie_bcch(codigo_serie, user, token):
+    """Función para consultar la API del Banco Central filtrando solo el último año"""
+    url = "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx"
+    
+    hoy = datetime.now()
+    hace_un_ano = hoy - timedelta(days=365)
+    
+    parametros = {
+        "user": user,
+        "pass": token,
+        "firstdate": hace_un_ano.strftime("%Y-%m-%d"),
+        "lastdate": hoy.strftime("%Y-%m-%d"),
+        "timeseries": codigo_serie,
+        "function": "GetSeries"
+    }
+    
+    try:
+        resp = requests.get(url, params=parametros, timeout=15)
+        data = resp.json()
+        
+        # LÍNEA NUEVA: Imprimimos la respuesta exacta del Banco Central para depurar
+        print(f"Respuesta {codigo_serie}: {data}")
+        
+        if 'CodigoError' in data and data['CodigoError'] != 0:
+            print(f"Error de API para {codigo_serie}: {data.get('DescripcionError')}")
+            return None
+            
+        observaciones = data.get('Series', {}).get('Obs', [])
+        if observaciones:
+            return float(observaciones[-1].get('value', 0))
+    except Exception as e:
+        print(f"Error de conexión en {codigo_serie}: {e}")
+    return None
