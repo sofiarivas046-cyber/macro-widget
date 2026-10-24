@@ -5,26 +5,17 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 def obtener_serie_bcch(codigo_serie, user, token):
-    """Función para consultar la API del Banco Central filtrando solo el último año"""
-    url = "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx"
-    
+    """Función para consultar la API del Banco Central con enlace en bruto"""
     hoy = datetime.now()
     hace_un_ano = hoy - timedelta(days=365)
     
-    parametros = {
-        "user": user,
-        "pass": token,
-        "firstdate": hace_un_ano.strftime("%Y-%m-%d"),
-        "lastdate": hoy.strftime("%Y-%m-%d"),
-        "timeseries": codigo_serie,
-        "function": "GetSeries"
-    }
+    # Construimos el enlace directo para que los símbolos $ no se traduzcan a %24
+    url = f"https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx?user={user}&pass={token}&firstdate={hace_un_ano.strftime('%Y-%m-%d')}&lastdate={hoy.strftime('%Y-%m-%d')}&timeseries={codigo_serie}&function=GetSeries"
     
     try:
-        resp = requests.get(url, params=parametros, timeout=15)
+        resp = requests.get(url, timeout=15)
         data = resp.json()
         
-        # LÍNEA NUEVA: Imprimimos la respuesta exacta del Banco Central para depurar
         print(f"Respuesta {codigo_serie}: {data}")
         
         if 'CodigoError' in data and data['CodigoError'] != 0:
