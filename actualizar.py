@@ -6,9 +6,19 @@ from zoneinfo import ZoneInfo
 
 def obtener_serie_bcch(codigo_serie, user, token):
     """Función de apoyo para consultar la API del Banco Central de forma limpia"""
-    url = f"https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx?user={user}&pass={token}&timeseries={codigo_serie}&function=GetSeries"
+    url = "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx"
+    
+    # Al usar un diccionario 'params', Python traduce automáticamente los símbolos '$' de tu token
+    parametros = {
+        "user": user,
+        "pass": token,
+        "timeseries": codigo_serie,
+        "function": "GetSeries"
+    }
+    
     try:
-        resp = requests.get(url, timeout=10)
+        # requests.get ahora empaqueta los parámetros de forma segura
+        resp = requests.get(url, params=parametros, timeout=10)
         data = resp.json()
         # Tomamos el último valor válido de la serie
         observaciones = data.get('Series', {}).get('Obs', [])
