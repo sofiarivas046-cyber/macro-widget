@@ -5,18 +5,22 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 def obtener_serie_bcch(codigo_serie, user, token):
-    """Función para consultar la API del Banco Central con enlace en bruto"""
+    url = "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx"
     hoy = datetime.now()
     hace_un_ano = hoy - timedelta(days=365)
     
-    # Construimos el enlace directo para que los símbolos $ no se traduzcan a %24
-    url = f"https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx?user={user}&pass={token}&firstdate={hace_un_ano.strftime('%Y-%m-%d')}&lastdate={hoy.strftime('%Y-%m-%d')}&timeseries={codigo_serie}&function=GetSeries"
+    parametros = {
+        "user": user,
+        "pass": token,
+        "firstdate": hace_un_ano.strftime("%Y-%m-%d"),
+        "lastdate": hoy.strftime("%Y-%m-%d"),
+        "timeseries": codigo_serie,
+        "function": "GetSeries"
+    }
     
     try:
-        resp = requests.get(url, timeout=15)
+        resp = requests.get(url, params=parametros, timeout=15)
         data = resp.json()
-        
-        print(f"Respuesta {codigo_serie}: {data}")
         
         if 'CodigoError' in data and data['CodigoError'] != 0:
             print(f"Error de API para {codigo_serie}: {data.get('DescripcionError')}")
@@ -30,12 +34,12 @@ def obtener_serie_bcch(codigo_serie, user, token):
     return None
 
 def obtener_datos():
-    bcch_user = os.getenv("BCCH_USER")
-    bcch_token = os.getenv("BCCH_TOKEN")
+    # LA CLAVE ESTÁ AQUÍ: .strip() elimina cualquier espacio o salto de línea invisible
+    bcch_user = os.getenv("BCCH_USER", "").strip()
+    bcch_token = os.getenv("BCCH_TOKEN", "").strip()
 
-    # LÍNEAS NUEVAS PARA DEPURACIÓN
-    print(f"¿Usuario cargado?: {bool(bcch_user)}")
-    print(f"¿Token cargado?: {bool(bcch_token)}")
+    # Imprimimos entre comillas simples para que, si hay un espacio, se note visualmente en el registro
+    print(f"Usuario limpio a enviar: '{bcch_user}'")
 
     codigos = {
         "uf": "F073.UFF.PRE.Z.D",
