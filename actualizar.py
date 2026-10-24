@@ -8,7 +8,6 @@ def obtener_serie_bcch(codigo_serie, user, token):
     """Función para consultar la API del Banco Central filtrando solo el último año"""
     url = "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx"
     
-    # Calculamos la fecha de hoy y la de hace un año para evitar descargas masivas
     hoy = datetime.now()
     hace_un_ano = hoy - timedelta(days=365)
     
@@ -22,11 +21,12 @@ def obtener_serie_bcch(codigo_serie, user, token):
     }
     
     try:
-        # Aumentamos un poco el tiempo de espera por si los servidores del banco están lentos
         resp = requests.get(url, params=parametros, timeout=15)
         data = resp.json()
         
-        # Si el banco detecta un error con tu usuario/token, quedará registrado en Actions
+        # LÍNEA NUEVA: Imprimimos la respuesta exacta del Banco Central para depurar
+        print(f"Respuesta {codigo_serie}: {data}")
+        
         if 'CodigoError' in data and data['CodigoError'] != 0:
             print(f"Error de API para {codigo_serie}: {data.get('DescripcionError')}")
             return None
@@ -41,6 +41,10 @@ def obtener_serie_bcch(codigo_serie, user, token):
 def obtener_datos():
     bcch_user = os.getenv("BCCH_USER")
     bcch_token = os.getenv("BCCH_TOKEN")
+
+    # LÍNEAS NUEVAS PARA DEPURACIÓN
+    print(f"¿Usuario cargado?: {bool(bcch_user)}")
+    print(f"¿Token cargado?: {bool(bcch_token)}")
 
     codigos = {
         "uf": "F073.UFF.PRE.Z.D",
@@ -88,37 +92,3 @@ def obtener_datos():
 
 if __name__ == "__main__":
     obtener_datos()
-
-def obtener_serie_bcch(codigo_serie, user, token):
-    """Función para consultar la API del Banco Central filtrando solo el último año"""
-    url = "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx"
-    
-    hoy = datetime.now()
-    hace_un_ano = hoy - timedelta(days=365)
-    
-    parametros = {
-        "user": user,
-        "pass": token,
-        "firstdate": hace_un_ano.strftime("%Y-%m-%d"),
-        "lastdate": hoy.strftime("%Y-%m-%d"),
-        "timeseries": codigo_serie,
-        "function": "GetSeries"
-    }
-    
-    try:
-        resp = requests.get(url, params=parametros, timeout=15)
-        data = resp.json()
-        
-        # LÍNEA NUEVA: Imprimimos la respuesta exacta del Banco Central para depurar
-        print(f"Respuesta {codigo_serie}: {data}")
-        
-        if 'CodigoError' in data and data['CodigoError'] != 0:
-            print(f"Error de API para {codigo_serie}: {data.get('DescripcionError')}")
-            return None
-            
-        observaciones = data.get('Series', {}).get('Obs', [])
-        if observaciones:
-            return float(observaciones[-1].get('value', 0))
-    except Exception as e:
-        print(f"Error de conexión en {codigo_serie}: {e}")
-    return None
