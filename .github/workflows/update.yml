@@ -2,41 +2,35 @@ name: Actualizar Indicadores Diarios
 
 on:
   schedule:
-    # Se ejecuta de lunes a viernes a las 08:30 AM hora de Chile (11:30 UTC)
-    - cron: '30 11 * * 1-5'
-  workflow_dispatch: # Este botón te permite forzar la actualización cuando tú quieras
-
-permissions:
-  contents: write
+    - cron: '30 11 * * *'
+  workflow_dispatch:
 
 jobs:
-  actualizar:
+  actualizar-datos:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Descargar repositorio
+      - name: Clonar el repositorio
         uses: actions/checkout@v4
 
-      - name: Instalar Python
+      - name: Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Instalar librerías
-        run: pip install requests
+      - name: Instalar dependencias
+        run: pip install requests tzdata
 
-      - name: Ejecutar script
+      - name: Ejecutar script de actualización
+        env:
+          BCCH_USER: ${{ secrets.BCCH_USER }}
+          BCCH_TOKEN: ${{ secrets.BCCH_TOKEN }}
         run: python actualizar.py
 
-      - name: Guardar cambios
+      - name: Subir cambios a GitHub
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add indicadores.json
-          git commit -m "Actualizacion automatica diaria" || exit 0
+          git commit -m "Actualización automática de indicadores" || exit 0
           git push
-          
-  - name: Ejecutar script de actualización
-      env:
-        BCCH_USER: ${{ secrets.BCCH_USER }}
-        BCCH_TOKEN: ${{ secrets.BCCH_TOKEN }}
-      run: python actualizar.py
