@@ -1,6 +1,5 @@
 import os
 import json
-import urllib.request
 import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -9,19 +8,22 @@ def obtener_serie_bcch(codigo_serie, user, token):
     hoy = datetime.now()
     hace_un_ano = hoy - timedelta(days=365)
     
-    # URL construida manualmente
-    url = f"https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx?user={user}&pass={token}&firstdate={hace_un_ano.strftime('%Y-%m-%d')}&lastdate={hoy.strftime('%Y-%m-%d')}&timeseries={codigo_serie}&function=GetSeries"
+    parametros = {
+        "user": user,
+        "pass": token,
+        "firstdate": hace_un_ano.strftime("%Y-%m-%d"),
+        "lastdate": hoy.strftime("%Y-%m-%d"),
+        "timeseries": codigo_serie,
+        "function": "GetSeries"
+    }
     
     try:
-        # urllib envía la petición en estado puro, sin recodificar los símbolos $ de tu token
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=15) as response:
-            data = json.loads(response.read().decode('utf-8'))
+        resp = requests.get("https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx", params=parametros, timeout=15)
+        data = resp.json()
         
-        if 'CodigoError' in data and data['CodigoError'] != 0:
-            print(f"Error de API para {codigo_serie}: {data.get('DescripcionError')}")
-            return None
-            
+        # ESTA LÍNEA ES VITAL: Nos mostrará exactamente qué dice el banco
+        print(f"Respuesta {codigo_serie}: {data}")
+        
         observaciones = data.get('Series', {}).get('Obs', [])
         if observaciones:
             return float(observaciones[-1].get('value', 0))
