@@ -34,8 +34,8 @@ jobs:
           git add indicadores.json
           git commit -m "Actualizacion automatica diaria" || exit 0
           git push
-
-      - name: Ejecutar script de actualización
+          
+  - name: Ejecutar script de actualización
       env:
         BCCH_USER: ${{ secrets.BCCH_USER }}
         BCCH_TOKEN: ${{ secrets.BCCH_TOKEN }}
