@@ -1,39 +1,60 @@
 import os
 import json
+import urllib.request
 import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+def consultar_api(url):
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+    with urllib.request.urlopen(req, timeout=15) as response:
+        return json.loads(response.read().decode('utf-8'))
+
 def obtener_serie_bcch(codigo_serie, user, token):
     hoy = datetime.now()
     hace_un_ano = hoy - timedelta(days=365)
+    f_ini = hace_un_ano.strftime('%Y-%m-%d')
+    f_fin = hoy.strftime('%Y-%m-%d')
     
-    parametros = {
-        "user": user,
-        "pass": token,
-        "firstdate": hace_un_ano.strftime("%Y-%m-%d"),
-        "lastdate": hoy.strftime("%Y-%m-%d"),
-        "timeseries": codigo_serie,
-        "function": "GetSeries"
-    }
+    # Intento 1: URL directa sin codificar los símbolos '$'
+    url_raw = f"https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx?user={user}&pass={token}&firstdate={f_ini}&lastdate={f_fin}&timeseries={codigo_serie}&function=GetSeries"
     
     try:
-        resp = requests.get("https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx", params=parametros, timeout=15)
-        data = resp.json()
+        data = consultar_api(url_raw)
         
-        # ESTA LÍNEA ES VITAL: Nos mostrará exactamente qué dice el banco
-        print(f"Respuesta {codigo_serie}: {data}")
-        
+        # Si da error -5, probamos codificando los símbolos '$' como '%24'
+        if data.get('Codigo') == -5:
+            token_encoded = token.replace('$', '%24')
+            url_enc = f"https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx?user={user}&pass={token_encoded}&firstdate={f_ini}&lastdate={f_fin}&timeseries={codigo_serie}&function=GetSeries"
+            data = consultar_api(url_enc)
+
+        if data.get('Codigo') != 0:
+            print(f"❌ [{codigo_serie}] Rechazo del BCCh -> Código {data.get('Codigo')}: {data.get('Descripcion')}")
+            return None
+            
         observaciones = data.get('Series', {}).get('Obs', [])
-        if observaciones:
-            return float(observaciones[-1].get('value', 0))
+        
+        # Recorremos de atrás hacia adelante buscando el último dato válido (ignorando 'NaN')
+        for obs in reversed(observaciones):
+            val = obs.get('value')
+            if val is not None and val != 'NaN' and obs.get('statusCode') == 'OK':
+                valor_limpio = float(val)
+                print(f"✅ [{codigo_serie}] Dato obtenido: {valor_limpio} (Fecha: {obs.get('indexDateString')})")
+                return valor_limpio
+                
+        print(f"⚠️ [{codigo_serie}] Serie recibida, pero sin observaciones numéricas válidas.")
     except Exception as e:
-        print(f"Error de conexión en {codigo_serie}: {e}")
+        print(f"🚨 Error técnico en {codigo_serie}: {e}")
     return None
 
 def obtener_datos():
     bcch_user = os.getenv("BCCH_USER", "").strip()
     bcch_token = os.getenv("BCCH_TOKEN", "").strip()
+
+    print(f"--- Diagnóstico de Credenciales ---")
+    print(f"Largo del usuario: {len(bcch_user)} caracteres")
+    print(f"Largo de la clave/token: {len(bcch_token)} caracteres")
+    print(f"-----------------------------------")
 
     codigos = {
         "uf": "F073.UFF.PRE.Z.D",
@@ -49,12 +70,12 @@ def obtener_datos():
     val_ipc = obtener_serie_bcch(codigos["ipc_mensual"], bcch_user, bcch_token)
     val_inflacion = obtener_serie_bcch(codigos["inflacion_anual"], bcch_user, bcch_token)
     
-    uf_str = f"${val_uf:,.0f}".replace(",", ".") if val_uf else "N/D"
-    dolar_str = f"${val_dolar:,.2f}".replace(",", ".") if val_dolar else "N/D"
+    uf_str = f"${val_uf:,.0f}".replace(",", ".") if val_uf is not None else "N/D"
+    dolar_str = f"${val_dolar:,.2f}".replace(",", ".") if val_dolar is not None else "N/D"
     tpm_str = f"{val_tpm}%" if val_tpm is not None else "N/D"
     ipc_str = f"{val_ipc}%" if val_ipc is not None else "N/D"
     inflacion_str = f"{val_inflacion}%" if val_inflacion is not None else "N/D"
-    pib_usd_str = "335.000 Millones USD" 
+    pib_usd_str = "335.000 Millones USD"
 
     try:
         resp_min = requests.get("https://mindicador.cl/api", timeout=10).json()
