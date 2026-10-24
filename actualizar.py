@@ -8,8 +8,8 @@ def consultar_serie_bcch(lista_codigos, user, token, obtener_historial=False):
     """Recorre una lista de códigos posibles en el BCCh hasta encontrar el vigente"""
     url = "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx"
     hoy = datetime.now()
-    # Pedimos 450 días para asegurar al menos 13 meses de datos en series mensuales
-    inicio = hoy - timedelta(days=450)
+    # Pedimos 550 días para cubrir con holgura series trimestrales como el PIB y anuales de IPC
+    inicio = hoy - timedelta(days=550)
     
     for codigo in lista_codigos:
         params = {
@@ -22,7 +22,6 @@ def consultar_serie_bcch(lista_codigos, user, token, obtener_historial=False):
         }
         try:
             resp = requests.get(url, params=params, timeout=15)
-            # Forzamos decodificación compatible con tildes del BCCh si falla UTF-8
             try:
                 data = resp.json()
             except Exception:
@@ -52,12 +51,13 @@ def obtener_datos():
     bcch_user = os.getenv("BCCH_USER", "").strip()
     bcch_token = os.getenv("BCCH_TOKEN", "").strip()
 
-    # Listas con los códigos oficiales vigentes del BCCh (incluyendo nueva base IPC 2023=100)
+    # Códigos oficiales vigentes del BCCh
     codigos_uf = ["F073.UFF.PRE.Z.D"]
     codigos_dolar = ["F073.TCO.PRE.Z.D"]
     codigos_tpm = ["F022.TPM.TIN.D001.NO.Z.D", "F073.TPM.TIN.Z.D"]
     codigos_ipc_var = ["F074.IPC.VAR.Z.Z.C.M", "F073.IPC.VAR.2023.M", "F073.IPC.VAR.Z.Z.C.M"]
     codigos_ipc_v12 = ["F074.IPC.V12.Z.Z.C.M", "F073.IPC.V12.2023.M", "F073.IPC.V12.Z.Z.C.M"]
+    codigos_pib_usd = ["F032.PIB.FAA.N.USD.2018.Z.Z.0.T"]
 
     # 1. Consultas directas al Banco Central
     val_uf = consultar_serie_bcch(codigos_uf, bcch_user, bcch_token)
@@ -65,8 +65,9 @@ def obtener_datos():
     val_tpm = consultar_serie_bcch(codigos_tpm, bcch_user, bcch_token)
     val_ipc = consultar_serie_bcch(codigos_ipc_var, bcch_user, bcch_token)
     val_inflacion = consultar_serie_bcch(codigos_ipc_v12, bcch_user, bcch_token)
+    val_pib = consultar_serie_bcch(codigos_pib_usd, bcch_user, bcch_token)
 
-    # 2. Respaldo inteligente para TPM, IPC e Inflación (y Desempleo del INE)
+    # 2. Respaldo para Desempleo (INE) y cálculo de Inflación 12M
     try:
         resp_min = requests.get("https://mindicador.cl/api", timeout=10).json()
     except Exception:
@@ -74,13 +75,10 @@ def obtener_datos():
 
     if val_tpm is None:
         val_tpm = resp_min.get("tpm", {}).get("valor")
-        print(f"🔄 [TPM] Obtenida desde respaldo: {val_tpm}")
 
     if val_ipc is None:
         val_ipc = resp_min.get("ipc", {}).get("valor")
-        print(f"🔄 [IPC] Obtenido desde respaldo: {val_ipc}")
 
-    # Si el BCCh no entrega la variación a 12 meses directa, la calculamos con los últimos 12 meses de IPC
     if val_inflacion is None:
         historial_ipc = consultar_serie_bcch(codigos_ipc_var, bcch_user, bcch_token, obtener_historial=True)
         if historial_ipc and len(historial_ipc) >= 12:
@@ -90,18 +88,6 @@ def obtener_datos():
                 acumulado *= (1.0 + (var_m / 100.0))
             val_inflacion = round((acumulado - 1.0) * 100.0, 1)
             print(f"🧮 [Inflación 12M] Calculada desde serie BCCh: {val_inflacion}%")
-        else:
-            # Cálculo con los últimos 12 meses de la serie IPC si el código de serie varió
-            try:
-                hist_min = requests.get("https://mindicador.cl/api/ipc", timeout=10).json().get("serie", [])
-                if len(hist_min) >= 12:
-                    acumulado = 1.0
-                    for item in hist_min[:12]:
-                        acumulado *= (1.0 + (float(item["valor"]) / 100.0))
-                    val_inflacion = round((acumulado - 1.0) * 100.0, 1)
-                    print(f"🧮 [Inflación 12M] Calculada exactamente (12 meses): {val_inflacion}%")
-            except Exception as e:
-                print(f"Error calculando inflación 12M: {e}")
 
     desempleo_num = resp_min.get("tasa_desempleo", {}).get("valor")
     
@@ -112,7 +98,12 @@ def obtener_datos():
     ipc_str = f"{val_ipc}%" if val_ipc is not None else "N/D"
     inflacion_str = f"{val_inflacion}%" if val_inflacion is not None else "N/D"
     desempleo_str = f"{round(float(desempleo_num), 2)}%" if desempleo_num is not None else "N/D"
-    pib_usd_str = "335.000 Millones USD"
+    
+    # Formateamos el PIB redondeado a millones cerrados (ej: "384.394 Millones USD")
+    if val_pib is not None:
+        pib_usd_str = f"{val_pib:,.0f} Millones USD".replace(",", ".")
+    else:
+        pib_usd_str = "384.394 Millones USD"
 
     hora_chile = datetime.now(ZoneInfo("America/Santiago"))
 
